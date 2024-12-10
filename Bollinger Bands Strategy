@@ -1,0 +1,77 @@
+//@version=5
+strategy("Super Bollinger Bands Strategy", overlay=true, shorttitle="Super Bollinger Bands Strategy", initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1, slippage=3)
+
+// Input settings
+src = input(close, title='Source')
+length = input.int(34, minval=1, title='Bollinger Bands Length')
+len = input.int(9, minval=1, title='Trend Line Period')
+Periods = input(title='ATR Period', defval=1)
+Multiplier = input.float(title='ATR Multiplier', step=0.1, defval=0.9)
+mult = input.float(1.750, minval=0.001, maxval=50, title='Dev')
+offset = input.int(0, 'Offset', minval=-500, maxval=500)
+changeATR = input.bool(title='Change ATR Calculation Method ?', defval=true)
+showsignals = input.bool(title='Show Buy/Sell Signals ?', defval=true)
+highlighting = input.bool(title='Highlighter On/Off ?', defval=true)
+startDate = input.time(timestamp("2024-01-01 00:00"), title="Start Date")
+endDate = input.time(timestamp("2035-12-31 23:59"), title="End Date")
+
+// Date filtering
+inDateRange = (time >= startDate and time <= endDate)
+
+// Bollinger Bands
+basis = ta.sma(src, length)
+dev = mult * ta.stdev(src, length)
+upper = basis + dev
+lower = basis - dev
+
+// Plotting Bollinger Bands
+plot(upper, 'OverBought', color=color.new(#f70606, 0), offset=offset)
+plot(lower, 'OverSold', color=color.new(color.lime, 0), offset=offset)
+
+// SMA (Trend Line)
+smma = 0.0
+smma := na(smma[1]) ? ta.ema(src, len) : (smma[1] * (len - 1) + src) / len
+plot(smma, 'TrendLine', color=color.new(#ff9800, 0))
+
+// ATR Calculation
+atr2 = ta.sma(ta.tr, Periods)
+atr = changeATR ? ta.atr(Periods) : atr2
+up = src - Multiplier * atr
+up1 = nz(up[1], up)
+up := close[1] > up1 ? math.max(up, up1) : up
+dn = src + Multiplier * atr
+dn1 = nz(dn[1], dn)
+dn := close[1] < dn1 ? math.min(dn, dn1) : dn
+
+// Trend detection
+trend = 1
+trend := nz(trend[1], trend)
+trend := trend == -1 and close > dn1 ? 1 : trend == 1 and close < up1 ? -1 : trend
+
+// Buy and sell signals
+buySignal = trend == 1 and trend[1] == -1 and inDateRange
+sellSignal = trend == -1 and trend[1] == 1 and inDateRange
+
+// Entry and exit conditions
+if buySignal
+    strategy.entry("Long", strategy.long)
+
+if sellSignal
+    strategy.entry("Short", strategy.short)
+
+// Exit conditions
+if close < lower
+    strategy.close("Long")
+
+if close > upper
+    strategy.close("Short")
+
+// Plot highlighting trends
+mPlot = plot(ohlc4, title='', style=plot.style_linebr, linewidth=0, transp=100)
+upPlot = plot(trend == 1 ? up : na, style=plot.style_linebr, linewidth=0, color=color.new(color.green, 100))
+dnPlot = plot(trend == -1 ? dn : na, style=plot.style_linebr, linewidth=0, color=color.new(color.red, 100))
+
+longFillColor = highlighting ? (trend == 1 ? color.green : na) : na
+shortFillColor = highlighting ? (trend == -1 ? color.red : na) : na
+fill(mPlot, upPlot, title='Buying Trend Highlighter', color=longFillColor, transp=70)
+fill(mPlot, dnPlot, title='Selling Trend Highlighter', color=shortFillColor, transp=70)
