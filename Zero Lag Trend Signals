@@ -1,0 +1,93 @@
+//@version=5
+strategy("Strategies- Zero Lag Trend Signals (MTF) [vsoul]", shorttitle="strategy - 0️⃣Zero Lag Signals", overlay=true, initial_capital=100, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_value=0.1, slippage=3)
+
+length = input.int(70, "Length", tooltip="The Look-Back window for the Zero-Lag EMA calculations", group="Main Calculations")
+mult = input.float(1.2, "Band Multiplier", tooltip="This value controls the thickness of the bands, a larger value makes the indicato less noisy", group="Main Calculations")
+t1 = input.timeframe("5", "Time frame 1", group="Extra Timeframes")
+t2 = input.timeframe("15", "Time frame 2", group="Extra Timeframes")
+t3 = input.timeframe("60", "Time frame 3", group="Extra Timeframes")
+t4 = input.timeframe("240", "Time frame 4", group="Extra Timeframes")
+t5 = input.timeframe("1D", "Time frame 5", group="Extra Timeframes")
+green = input.color(#00ffbb, "Bullish Color", group="Appearance")
+red = input.color(#ff1100, "Bearish Color", group="Appearance")
+startDate = input.time(timestamp("2024-11-01 00:00"), title="Start Date")
+endDate = input.time(timestamp("2035-12-31 23:59"), title="End Date")
+
+src = close
+
+lag = math.floor((length - 1) / 2)
+
+zlema = ta.ema(src + (src - src[lag]), length)
+
+volatility = ta.highest(ta.atr(length), length * 3) * mult
+
+var trend = 0
+
+if ta.crossover(close, zlema + volatility)
+    trend := 1
+
+if ta.crossunder(close, zlema - volatility)
+    trend := -1
+
+zlemaColor = trend == 1 ? color.new(green, 70) : color.new(red, 70)
+m = plot(zlema, title="Zero Lag Basis", linewidth=2, color=zlemaColor)
+upper = plot(trend == -1 ? zlema + volatility : na, style=plot.style_linebr, color=color.new(red, 90), title="Upper Deviation Band")
+lower = plot(trend == 1 ? zlema - volatility : na, style=plot.style_linebr, color=color.new(green, 90), title="Lower Deviation Band")
+
+fill(m, upper, (open + close) / 3, zlema + volatility, color.new(red, 90), color.new(red, 70))
+fill(m, lower, (open + close) / 3, zlema - volatility, color.new(green, 90), color.new(green, 70))
+
+plotshape(ta.crossunder(trend, 0) ? zlema + volatility : na, "Bearish Trend", shape.labeldown, location.absolute, red, text="sell/short", textcolor=color.black, size=size.small)
+plotshape(ta.crossover(trend, 0) ? zlema - volatility : na, "Bullish Trend", shape.labelup, location.absolute, green, text="buy/long", textcolor=color.black, size=size.small)
+
+plotchar(ta.crossover(close, zlema) and trend == 1 and trend[1] == 1 ? zlema - volatility * 1.5 : na, "Bullish Entry", "buy/long", location.absolute, green, size=size.tiny)
+plotchar(ta.crossunder(close, zlema) and trend == -1 and trend[1] == -1 ? zlema + volatility * 1.5 : na, "Bearish Entry", "sell/short", location.absolute, red, size=size.tiny)
+
+s1 = request.security(syminfo.tickerid, t1, trend)
+s2 = request.security(syminfo.tickerid, t2, trend)
+s3 = request.security(syminfo.tickerid, t3, trend)
+s4 = request.security(syminfo.tickerid, t4, trend)
+s5 = request.security(syminfo.tickerid, t5, trend)
+
+s1a = s1 == 1 ? "Bullish" : "Bearish"
+s2a = s2 == 1 ? "Bullish" : "Bearish"
+s3a = s3 == 1 ? "Bullish" : "Bearish"
+s4a = s4 == 1 ? "Bullish" : "Bearish"
+s5a = s5 == 1 ? "Bullish" : "Bearish"
+
+if barstate.islast
+    var data_table = table.new(position=position.top_right, columns=2, rows=6, bgcolor=chart.bg_color, border_width=1, border_color=chart.fg_color, frame_color=chart.fg_color, frame_width=1)
+    table.cell(data_table, text_halign=text.align_center, column=0, row=0, text="Time Frame", text_color=chart.fg_color)
+    table.cell(data_table, text_halign=text.align_center, column=1, row=0, text="Signal", text_color=chart.fg_color)
+
+    table.cell(data_table, text_halign=text.align_center, column=0, row=1, text=t1, text_color=chart.fg_color)
+    table.cell(data_table, text_halign=text.align_center, column=1, row=1, text=s1a, text_color=chart.fg_color, bgcolor=s1a == "Bullish" ? color.new(green, 70) : color.new(red, 70))
+
+    table.cell(data_table, text_halign=text.align_center, column=0, row=2, text=t2, text_color=chart.fg_color)
+    table.cell(data_table, text_halign=text.align_center, column=1, row=2, text=s2a, text_color=chart.fg_color, bgcolor=s2a == "Bullish" ? color.new(green, 70) : color.new(red, 70))
+
+    table.cell(data_table, text_halign=text.align_center, column=0, row=3, text=t3, text_color=chart.fg_color)
+    table.cell(data_table, text_halign=text.align_center, column=1, row=3, text=s3a, text_color=chart.fg_color, bgcolor=s3a == "Bullish" ? color.new(green, 70) : color.new(red, 70))
+
+    table.cell(data_table, text_halign=text.align_center, column=0, row=4, text=t4, text_color=chart.fg_color)
+    table.cell(data_table, text_halign=text.align_center, column=1, row=4, text=s4a, text_color=chart.fg_color, bgcolor=s4a == "Bullish" ? color.new(green, 70) : color.new(red, 70))
+
+    table.cell(data_table, text_halign=text.align_center, column=0, row=5, text=t5, text_color=chart.fg_color)
+    table.cell(data_table, text_halign=text.align_center, column=1, row=5, text=s5a, text_color=chart.fg_color, bgcolor=s5a == "Bullish" ? color.new(green, 70) : color.new(red, 70))
+
+// Trading logic
+if (time >= startDate and time <= endDate)
+    if (ta.crossover(close, zlema + volatility))
+        strategy.entry("Buy", strategy.long)
+    if (ta.crossunder(close, zlema - volatility))
+        strategy.entry("Sell", strategy.short)
+
+// Take Profit logic
+long_take_profit = strategy.position_avg_price * 1.25
+short_take_profit = strategy.position_avg_price * 1.25
+
+if (strategy.position_size > 0 and close >= long_take_profit)
+    strategy.close("Buy")
+
+if (strategy.position_size < 0 and close <= short_take_profit)
+    strategy.close("Sell")
